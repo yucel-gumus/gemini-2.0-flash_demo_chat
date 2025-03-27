@@ -1,21 +1,49 @@
 document.addEventListener('DOMContentLoaded', function() {
+    const promptTextarea = document.getElementById('prompt');
     const generateBtn = document.getElementById('generate-btn');
-    const promptInput = document.getElementById('prompt');
-    const responseContainer = document.getElementById('response-container');
-    const responseContent = document.getElementById('response-content');
     const loadingIndicator = document.getElementById('loading');
+    const chatContainer = document.getElementById('chat-container');
+    const clearChatBtn = document.getElementById('clear-chat-btn');
 
-    generateBtn.addEventListener('click', async function() {
-        const prompt = promptInput.value.trim();
+    // Function to add a message to the chat container
+    function addMessageToChat(content, isUser = false) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `chat-message ${isUser ? 'user-message' : 'assistant-message'}`;
+        
+        const messageHeader = document.createElement('div');
+        messageHeader.className = 'message-header';
+        messageHeader.innerHTML = `<i class="${isUser ? 'fas fa-user' : 'fas fa-robot'} me-2"></i><strong>${isUser ? 'Siz' : 'Asistan'}</strong>`;
+        
+        const messageContent = document.createElement('div');
+        messageContent.className = 'message-content';
+        messageContent.innerHTML = content.replace(/\n/g, '<br>');
+        
+        messageDiv.appendChild(messageHeader);
+        messageDiv.appendChild(messageContent);
+        
+        chatContainer.appendChild(messageDiv);
+        
+        // Scroll to the bottom of the chat container
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
+
+    // Function to send the request to the API
+    async function generateResponse() {
+        const prompt = promptTextarea.value.trim();
         
         if (!prompt) {
-            alert('Lütfen bir soru veya konu girin');
+            alert('Lütfen bir soru yazın');
             return;
         }
-
-        // Yükleme göstergesini göster
+        
+        // Add user message to chat
+        addMessageToChat(prompt, true);
+        
+        // Clear the textarea
+        promptTextarea.value = '';
+        
+        // Show loading indicator
         loadingIndicator.style.display = 'block';
-        responseContainer.style.display = 'none';
         
         try {
             const response = await fetch('/generate', {
@@ -23,68 +51,69 @@ document.addEventListener('DOMContentLoaded', function() {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ prompt })
+                body: JSON.stringify({ prompt: prompt })
             });
-
+            
             const data = await response.json();
             
-            // Yükleme göstergesini gizle
-            loadingIndicator.style.display = 'none';
-            
-            if (data.error) {
-                responseContent.textContent = `Hata: ${data.error}`;
+            if (response.ok) {
+                // Add assistant message to chat
+                addMessageToChat(data.response);
             } else {
-                // Markdown formatını HTML'e dönüştür (basit bir yaklaşım)
-                const formattedResponse = formatResponse(data.response);
-                responseContent.innerHTML = formattedResponse;
+                // Show error
+                alert('Hata: ' + (data.error || 'Bilinmeyen bir hata oluştu'));
             }
-            
-            // Yanıt konteynerini göster
-            responseContainer.style.display = 'block';
-            
         } catch (error) {
-            // Yükleme göstergesini gizle
+            alert('Bağlantı hatası: ' + error.message);
+        } finally {
+            // Hide loading indicator
             loadingIndicator.style.display = 'none';
-            
-            // Hatayı göster
-            responseContent.textContent = `Bir hata oluştu: ${error.message}`;
-            responseContainer.style.display = 'block';
         }
-    });
-
-    // Shift+Enter tuşu ile göndermeyi etkinleştir
-    promptInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && e.shiftKey) {
-            e.preventDefault();
-            generateBtn.click();
+    }
+    
+    // Function to clear the chat
+    async function clearChat() {
+        if (confirm('Sohbet geçmişini temizlemek istediğinize emin misiniz?')) {
+            try {
+                const response = await fetch('/clear_chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    // Clear the chat container
+                    chatContainer.innerHTML = '';
+                } else {
+                    alert('Sohbet geçmişi temizlenirken bir hata oluştu.');
+                }
+            } catch (error) {
+                alert('Bağlantı hatası: ' + error.message);
+            }
+        }
+    }
+    
+    // Add event listener to the generate button
+    generateBtn.addEventListener('click', generateResponse);
+    
+    // Add event listener to the clear chat button
+    clearChatBtn.addEventListener('click', clearChat);
+    
+    // Add event listener for Shift+Enter in the textarea
+    promptTextarea.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter' && event.shiftKey) {
+            event.preventDefault();
+            generateResponse();
         }
     });
     
-    // Basit markdown formatını HTML'e dönüştüren fonksiyon
-    function formatResponse(text) {
-        if (!text) return '';
-        
-        // Kod bloklarını işle
-        text = text.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
-        
-        // Başlıkları işle
-        text = text.replace(/^### (.*$)/gm, '<h3>$1</h3>');
-        text = text.replace(/^## (.*$)/gm, '<h2>$1</h2>');
-        text = text.replace(/^# (.*$)/gm, '<h1>$1</h1>');
-        
-        // Kalın ve italik metinleri işle
-        text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-        text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
-        
-        // Listeleri işle
-        text = text.replace(/^\s*\*\s(.*$)/gm, '<li>$1</li>');
-        
-        // Paragrafları işle
-        text = text.replace(/\n\n/g, '</p><p>');
-        
-        // Satır sonlarını işle
-        text = text.replace(/\n/g, '<br>');
-        
-        return '<p>' + text + '</p>';
-    }
-});
+    // Auto-focus the textarea
+    promptTextarea.focus();
+    
+    // Auto-resize textarea based on content
+    promptTextarea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+    });
+}); 
